@@ -17,6 +17,9 @@
  */
 package com.graphhopper.jsprit.core.algorithm.recreate;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.graphhopper.jsprit.core.algorithm.state.InternalStates;
 import com.graphhopper.jsprit.core.problem.Capacity;
 import com.graphhopper.jsprit.core.problem.constraint.SoftRouteConstraint;
@@ -24,11 +27,13 @@ import com.graphhopper.jsprit.core.problem.driver.Driver;
 import com.graphhopper.jsprit.core.problem.job.Job;
 import com.graphhopper.jsprit.core.problem.misc.JobInsertionContext;
 import com.graphhopper.jsprit.core.problem.solution.route.VehicleRoute;
+import com.graphhopper.jsprit.core.problem.solution.route.activity.BreakActivity;
+import com.graphhopper.jsprit.core.problem.solution.route.activity.TourActivity;
+import com.graphhopper.jsprit.core.problem.solution.route.activity.TourActivity.JobActivity;
 import com.graphhopper.jsprit.core.problem.solution.route.state.RouteAndActivityStateGetter;
 import com.graphhopper.jsprit.core.problem.vehicle.Vehicle;
 import com.graphhopper.jsprit.core.problem.vehicle.VehicleImpl;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.graphhopper.jsprit.core.problem.vehicle.VehicleImpl.NoVehicle;
 
 
 final class JobInsertionConsideringFixCostsCalculator implements JobInsertionCostsCalculator, SoftRouteConstraint {
@@ -67,15 +72,46 @@ final class JobInsertionConsideringFixCostsCalculator implements JobInsertionCos
         return insertionData;
     }
 
-    private double getFixCostContribution(final VehicleRoute currentRoute, final Job jobToInsert, final Vehicle newVehicle) {
-        Capacity currentMaxLoadInRoute = getCurrentMaxLoadInRoute(currentRoute);
-        double relFixCost = getDeltaRelativeFixCost(currentRoute, newVehicle, jobToInsert,currentMaxLoadInRoute);
-        double absFixCost = getDeltaAbsoluteFixCost(currentRoute, newVehicle, jobToInsert,currentMaxLoadInRoute);
-        double deltaFixCost = (1 - solution_completeness_ratio) * relFixCost + solution_completeness_ratio * absFixCost;
-        double fixcost_contribution = weight_deltaFixCost * solution_completeness_ratio * deltaFixCost;
-        return fixcost_contribution;
+//    private double getFixCostContribution(final VehicleRoute currentRoute, final Job jobToInsert, final Vehicle newVehicle) {
+//        Capacity currentMaxLoadInRoute = getCurrentMaxLoadInRoute(currentRoute);
+//        double relFixCost = getDeltaRelativeFixCost(currentRoute, newVehicle, jobToInsert,currentMaxLoadInRoute);
+//        double absFixCost = getDeltaAbsoluteFixCost(currentRoute, newVehicle, jobToInsert,currentMaxLoadInRoute);
+//        double deltaFixCost = (1 - solution_completeness_ratio) * relFixCost + solution_completeness_ratio * absFixCost;
+//        double fixcost_contribution = weight_deltaFixCost * solution_completeness_ratio * deltaFixCost;
+//        return fixcost_contribution;
+//    }
+    
+    private static double lerp(double a, double b , double f){
+        if(f<0){
+            f=0;
+        }else if (f>1){
+            f = 1;
+        }
+        return (1.0-f)* a + f*b;
     }
 
+    private double getFixCostContribution(VehicleRoute currentRoute,Job jobToInser, Vehicle newVehicle) {
+        boolean emptyRoute = currentRoute.getVehicle() instanceof NoVehicle;
+        if (!emptyRoute) {
+            emptyRoute = true;
+            for (TourActivity activity : currentRoute.getActivities()) {
+                if (activity instanceof JobActivity && !(activity instanceof BreakActivity)) {
+                    emptyRoute = false;
+                    break;
+                }
+            }
+        }
+        if (emptyRoute) {
+
+            // calc the weighted fixed cost
+            double fixed = newVehicle.getType().getVehicleCostParams().fix;
+            return solution_completeness_ratio * fixed;
+
+        }
+
+        // prexisting route
+        return 0;
+    }
     public void setWeightOfFixCost(double weight) {
         weight_deltaFixCost = weight;
         logger.debug("set weightOfFixCostSaving to {}", weight);
